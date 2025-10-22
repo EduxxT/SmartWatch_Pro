@@ -1,30 +1,41 @@
-// lib/main.dart
-
 import 'package:flutter/material.dart';
-import 'screens/home_screen_manager.dart'; // Importamos el nuevo Manager
-import 'utils/app_theme.dart';
+import 'package:provider/provider.dart';
 
-void main() {
-  runApp(const MyApp());
+// --- AJUSTA ESTAS RUTAS SEGÚN TU PROYECTO ---
+import '../modules/database/local_database.dart'; 
+import '../modules/bluetooth/bluetooth_service.dart'; 
+import 'screens/dashboard_screen.dart'; 
+// ---------------------------------------------
+
+void main() async { // 1. Añade 'async'
+  // 2. Asegura que Flutter esté listo
+  WidgetsFlutterBinding.ensureInitialized(); 
+
+  // 3. Llama a tu nueva función de prueba
+  print("--- INICIANDO PRUEBA DE BASE DE DATOS ---");
+  await LocalDatabase.testConnection();
+  print("--- PRUEBA DE BASE DE DATOS TERMINADA ---");
+
+  // 4. El resto de tu app
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => BluetoothService(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Wearable Dashboard',
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: kDarkPrimaryBackground,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: kAccentColor,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
-      // CAMBIO CLAVE: Iniciamos con el Manager
-      home: const HomeScreenManager(),
+      title: 'Smartwatch App',
+      // Asumo que tienes tus temas definidos en algún lugar
+      // theme: ThemeData.light(), 
+      // darkTheme: ThemeData.dark(),
+      home: DashboardScreen(), // Tu pantalla principal
     );
   }
 }

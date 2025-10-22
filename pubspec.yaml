@@ -36,6 +36,11 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_fonts: ^6.1.0 
   percent_indicator: ^4.2.3 
+  flutter_blue_plus: ^1.31.18
+  sqflite: ^2.3.2              # Base de datos local
+  path_provider: ^2.1.4
+  provider: ^6.1.5+1
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
