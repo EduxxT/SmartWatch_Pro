@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../modules/database/local_database.dart'; 
 import '../modules/bluetooth/bluetooth_service.dart'; 
 import 'screens/dashboard_screen.dart'; 
+import 'screens/home_screen_manager.dart'; // <-- AÑADIDO
 // ---------------------------------------------
 
 void main() async { // 1. Añade 'async'
@@ -35,7 +36,7 @@ class MyApp extends StatelessWidget {
       // Asumo que tienes tus temas definidos en algún lugar
       // theme: ThemeData.light(), 
       // darkTheme: ThemeData.dark(),
-      home: DashboardScreen(), // Tu pantalla principal
+      home: const HomeScreenManager(), // <-- CAMBIADO: antes DashboardScreen()
     );
   }
 }
