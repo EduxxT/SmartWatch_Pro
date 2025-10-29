@@ -1,206 +1,240 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import '../database/local_database.dart'; 
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:io';
+import '../database/local_database.dart';
 
-// 1. Agregamos 'with ChangeNotifier'
+/// Servicio que gestiona la conexión BLE con ChangeNotifier
 class BluetoothService with ChangeNotifier {
   BluetoothDevice? connectedDevice;
-  StreamSubscription? _scanSubscription;
-  StreamSubscription? _dataSubscription;
-
-  // Bandera para evitar múltiples intentos de conexión
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
+  StreamSubscription<List<int>>? _dataSubscription;
   bool _isConnecting = false;
-
-  // 2. Agregamos la variable de estado y su 'getter'
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
-  // --- OBTÉN ESTOS VALORES DE LA DOCUMENTACIÓN DE TU RELOJ ---
-  final String TARGET_DEVICE_NAME = "MySmartwatch";
-  // final Guid SERVICE_UUID = Guid("TU-SERVICE-UUID-AQUÍ");
-  // final Guid CHARACTERISTIC_UUID = Guid("TU-CHARACTERISTIC-UUID-AQUÍ");
-  // ---------------------------------------------------------
+  /// Lista de dispositivos BLE encontrados
+  final List<BluetoothDevice> _availableDevices = [];
+  List<BluetoothDevice> get availableDevices => List.unmodifiable(_availableDevices);
 
+  bool _isScanning = false;
+  bool get isScanning => _isScanning;
 
-  Future<void> connectToDevice() async {
-    print("Revisando permisos..."); // Usando el _log que hicimos
-  Map<Permission, PermissionStatus> statuses;
+  /// UUIDs del servicio UART BLE (modifica si usas otro)
+  final Guid UART_SERVICE_UUID = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+  final Guid UART_RX_UUID = Guid("6E400002-B5A3-F393-E0A9-E50E24DCCA9E"); // escribir al ESP32
+  final Guid UART_TX_UUID = Guid("6E400003-B5A3-F393-E0A9-E50E24DCCA9E"); // leer del ESP32
 
-  if (Platform.isAndroid) {
-    statuses = await [
-      Permission.location,
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-    ].request();
-  } else {
-    // Para iOS
-    statuses = await [
-      Permission.bluetooth,
-    ].request();
-  }
+  /// Inicia el escaneo BLE
+  Future<void> startScan({int timeoutSeconds = 12}) async {
+    if (_isScanning || _isConnecting) return;
 
-  // Revisa si algún permiso fue denegado
-  bool allGranted = statuses.values.every((status) => status.isGranted);
-  if (!allGranted) {
-    print("❌ Permisos denegados. No se puede escanear.");
-    _isConnecting = false;
-    return; // No continúes si faltan permisos
-  }
-  print("✅ Permisos concedidos.");
-    if (FlutterBluePlus.isScanningNow || _isConnecting) {
-      print("⚠️ Ya se está escaneando o conectando.");
+    print("🛠️ Verificando permisos...");
+    Map<Permission, PermissionStatus> statuses;
+
+    if (Platform.isAndroid) {
+      statuses = await [
+        Permission.location,
+        Permission.bluetoothScan,
+        Permission.bluetoothConnect,
+      ].request();
+    } else {
+      statuses = await [Permission.bluetooth].request();
+    }
+
+    if (!statuses.values.every((s) => s.isGranted)) {
+      print("❌ Permisos denegados.");
       return;
     }
 
-    print("🔎 Iniciando escaneo...");
-    _isConnecting = true; 
+    _availableDevices.clear();
+    _isScanning = true;
+    notifyListeners();
 
-    _scanSubscription = FlutterBluePlus.scanResults.listen((results) async {
-      BluetoothDevice? targetDevice;
-      try {
-        targetDevice = results.firstWhere(
-          (r) => r.device.name == TARGET_DEVICE_NAME,
-        ).device;
-      } catch (e) {
-        // No encontrado en este lote, espera al siguiente
-        return;
-      }
+    print("🔎 Iniciando escaneo BLE...");
+    FlutterBluePlus.startScan(timeout: Duration(seconds: timeoutSeconds));
 
-      if (targetDevice != null) {
-        await FlutterBluePlus.stopScan();
-        _scanSubscription?.cancel();
-        
-        print("✅ Dispositivo encontrado: ${targetDevice.name}");
-        connectedDevice = targetDevice;
+    _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+      for (var result in results) {
+        final device = result.device;
 
-        try {
-          await connectedDevice!.connect();
-          print("✅ CONECTADO a ${connectedDevice!.name}");
+        // 🔹 Filtrado flexible para ESP32-S3
+        bool isTargetDevice = device.name == "ESP32S3_UART" ||
+            device.id.id.toLowerCase().contains("esp32");
 
-          // 3. ¡AVISA A LA UI! (Conectado)
-          _isConnected = true;
+        bool alreadyAdded = _availableDevices.any((d) => d.id == device.id);
+
+        if (isTargetDevice && !alreadyAdded) {
+          _availableDevices.add(device);
           notifyListeners();
-
-          _listenToDisconnects();
-          await _listenToData();
-
-        } catch (e) {
-          print("❌ ERROR AL CONECTAR: $e");
-          connectedDevice = null;
-          
-          // 3. ¡AVISA A LA UI! (Error al conectar)
-          _isConnected = false;
-          notifyListeners();
-
-        } finally {
-          // Pase lo que pase, terminamos el intento de conexión
-          _isConnecting = false;
+          print("📱 Dispositivo detectado: ${device.name} (${device.id})");
         }
       }
     }, onError: (e) {
-      print("❌ ERROR DE ESCANEO: $e");
-      _isConnecting = false;
+      print("❌ Error de escaneo: $e");
+      stopScan();
     });
 
-    FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+    // Detener escaneo automáticamente
+    Future.delayed(Duration(seconds: timeoutSeconds), () => stopScan());
   }
 
-  /// Escucha el estado de la conexión para detectar desconexiones
-  void _listenToDisconnects() {
-    connectedDevice?.state.listen((BluetoothDeviceState state) {
+  /// Detiene el escaneo
+  Future<void> stopScan() async {
+    if (_isScanning) {
+      await FlutterBluePlus.stopScan();
+      await _scanSubscription?.cancel();
+      _isScanning = false;
+      notifyListeners();
+      print("🛑 Escaneo detenido.");
+    }
+  }
+
+  /// Conecta a un dispositivo BLE
+  Future<void> connectToDevice(BluetoothDevice device) async {
+    if (_isConnecting || _isConnected) return;
+
+    print("🔗 Conectando a ${device.name}...");
+    _isConnecting = true;
+    notifyListeners();
+
+    try {
+      await device.connect(autoConnect: false);
+      connectedDevice = device;
+      _isConnected = true;
+      _isConnecting = false;
+      notifyListeners();
+      print("✅ Conectado a ${device.name}");
+
+      _listenToDisconnects(device);
+      await _listenToData(device);
+    } catch (e) {
+      print("❌ Error al conectar: $e");
+      _isConnecting = false;
+      _isConnected = false;
+      notifyListeners();
+    }
+  }
+
+  /// Escucha desconexiones automáticas
+  void _listenToDisconnects(BluetoothDevice device) {
+    device.state.listen((state) {
       if (state == BluetoothDeviceState.disconnected) {
-        print("❌ DISPOSITIVO DESCONECTADO");
+        print("❌ Dispositivo desconectado: ${device.name}");
+        _dataSubscription?.cancel();
         connectedDevice = null;
-        _dataSubscription?.cancel(); 
-        
-        // 4. ¡AVISA A LA UI! (Desconectado)
         _isConnected = false;
         notifyListeners();
       }
-    } as void Function(BluetoothConnectionState event)?);
+    });
   }
 
-  /// Descubre servicios y se suscribe a las características
-  Future<void> _listenToData() async {
-    if (connectedDevice == null) return;
-
+  /// Suscribe a las características del UART BLE
+  Future<void> _listenToData(BluetoothDevice device) async {
     try {
-      var services = await connectedDevice!.discoverServices();
+      var services = await device.discoverServices();
       for (var service in services) {
-        // TODO: Filtra por el UUID de tu servicio
-        for (var characteristic in service.characteristics) {
-          // TODO: Filtra por el UUID de tu característica
-          
-          if (characteristic.properties.notify) {
-            await characteristic.setNotifyValue(true);
-            
-            _dataSubscription = characteristic.value.listen((value) {
-              final dataString = String.fromCharCodes(value);
-              _processData(dataString);
-            }, onError: (e) {
-              print("❌ ERROR AL ESCUCHAR CARACTERÍSTICA: $e");
-            });
-            print("✅ Suscrito a la característica ${characteristic.uuid}");
+        if (service.uuid == UART_SERVICE_UUID) {
+          for (var characteristic in service.characteristics) {
+            if (characteristic.uuid == UART_TX_UUID && characteristic.properties.notify) {
+              await characteristic.setNotifyValue(true);
+              _dataSubscription = characteristic.value.listen((value) {
+                final data = String.fromCharCodes(value);
+                _processData(data);
+              }, onError: (e) {
+                print("❌ Error escuchando característica: $e");
+              });
+              print("✅ Suscrito a TX: ${characteristic.uuid}");
+            }
           }
         }
       }
     } catch (e) {
-      print("❌ ERROR AL DESCUBRIR SERVICIOS: $e");
+      print("❌ Error al descubrir servicios: $e");
     }
   }
 
-  /// Procesa de forma segura los datos recibidos
+  /// Procesa y guarda los datos recibidos
   void _processData(String data) {
-    if (data.trim().isEmpty) {
-      print("⚠️ Datos recibidos vacíos.");
-      return;
-    }
+    if (data.trim().isEmpty) return;
 
     try {
+      // Ejemplo de datos en formato simplificado
+      // "steps:1000,hr:75,activity:walk"
       final parts = data.split(',');
-      if (parts.length < 3) {
-        print("❌ Error de formato: Se esperaban 3 partes. Data: '$data'");
-        return;
-      }
+      if (parts.length < 3) return;
 
       final steps = int.tryParse(parts[0].split(':')[1]);
       final hr = int.tryParse(parts[1].split(':')[1]);
       final activity = parts[2].split(':')[1];
 
-      if (steps == null || hr == null) {
-        print("❌ Error de formato: No se pudo convertir a número. Data: '$data'");
-        return;
+      if (steps != null && hr != null) {
+        LocalDatabase.insertData(
+          steps: steps,
+          heartRate: hr,
+          activityType: activity,
+        );
+        print("💾 Guardado: $steps pasos, $hr bpm, actividad: $activity");
       }
-
-      LocalDatabase.insertData(
-        steps: steps,
-        heartRate: hr,
-        activityType: activity,
-      );
-
-      print("💾 Datos guardados: $steps pasos, $hr bpm, $activity");
-
     } catch (e) {
-      print("❌ ERROR GENERAL AL PROCESAR: $e. Data: '$data'");
+      print("❌ Error procesando datos: $e");
     }
   }
 
-  /// Método público para desconectar
-  void disconnect() {
-    _scanSubscription?.cancel();
-    _dataSubscription?.cancel();
-    connectedDevice?.disconnect();
-    connectedDevice = null;
-    _isConnecting = false;
+  // =========================================================
+  // 🔷 Funciones de Bluetooth
+  // =========================================================
 
-    // 5. ¡AVISA A LA UI! (Desconexión manual)
-    if (_isConnected) {
-      _isConnected = false;
-      notifyListeners();
+  Future<bool> isBluetoothEnabled() async {
+    try {
+      final state = await FlutterBluePlus.adapterStateNow;
+      return state == BluetoothAdapterState.on;
+    } catch (e) {
+      print("⚠️ Error verificando Bluetooth: $e");
+      return false;
     }
-    print("🔌 Desconectado manualmente.");
+  }
+
+  String get connectedDeviceName => connectedDevice?.name ?? "";
+
+  Future<void> disableBluetooth() async {
+    try {
+      if (Platform.isAndroid) {
+        await FlutterBluePlus.turnOff();
+        print("🔵 Bluetooth apagado.");
+        await disconnect();
+      }
+    } catch (e) {
+      print("❌ Error apagando Bluetooth: $e");
+    }
+    notifyListeners();
+  }
+
+  Future<void> enableBluetooth() async {
+    try {
+      if (Platform.isAndroid) {
+        await FlutterBluePlus.turnOn();
+        print("🔵 Bluetooth activado.");
+      }
+    } catch (e) {
+      print("❌ Error activando Bluetooth: $e");
+    }
+    notifyListeners();
+  }
+
+  Future<void> disconnect() async {
+    await _scanSubscription?.cancel();
+    await _dataSubscription?.cancel();
+
+    if (connectedDevice != null) {
+      await connectedDevice!.disconnect();
+      print("🔌 Desconectado de ${connectedDevice!.name}");
+      connectedDevice = null;
+    }
+
+    _isConnected = false;
+    _isConnecting = false;
+    notifyListeners();
   }
 }
