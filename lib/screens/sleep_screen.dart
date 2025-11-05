@@ -8,7 +8,7 @@ import '../widgets/week_days_graph.dart';
 import '../widgets/last_sleep_card.dart';
 
 class SleepScreen extends StatelessWidget {
-  const SleepScreen({Key? key}) : super(key: key);
+  const SleepScreen({super.key});
 
   // Datos de ejemplo para la gráfica
   static final List<Map<String, dynamic>> _mockSleepData = [

@@ -1,240 +1,219 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../database/local_database.dart';
+import 'package:provider/provider.dart';
 
-/// Servicio que gestiona la conexión BLE con ChangeNotifier
-class BluetoothService with ChangeNotifier {
+// =====================
+// Bluetooth Provider
+// =====================
+class BluetoothProvider with ChangeNotifier {
   BluetoothDevice? connectedDevice;
-  StreamSubscription<List<ScanResult>>? _scanSubscription;
+  StreamSubscription? _scanSubscription;
   StreamSubscription<List<int>>? _dataSubscription;
+  Timer? _timeSyncTimer; // ⏰ Timer para sincronizar la hora
+
   bool _isConnecting = false;
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
-  /// Lista de dispositivos BLE encontrados
-  final List<BluetoothDevice> _availableDevices = [];
-  List<BluetoothDevice> get availableDevices => List.unmodifiable(_availableDevices);
-
   bool _isScanning = false;
   bool get isScanning => _isScanning;
 
-  /// UUIDs del servicio UART BLE (modifica si usas otro)
-  final Guid UART_SERVICE_UUID = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
-  final Guid UART_RX_UUID = Guid("6E400002-B5A3-F393-E0A9-E50E24DCCA9E"); // escribir al ESP32
-  final Guid UART_TX_UUID = Guid("6E400003-B5A3-F393-E0A9-E50E24DCCA9E"); // leer del ESP32
+  final List<BluetoothDevice> _availableDevices = [];
+  List<BluetoothDevice> get availableDevices => List.unmodifiable(_availableDevices);
 
-  /// Inicia el escaneo BLE
+  // Datos ESP32
+  int steps = 0;
+  int bpm = 0;
+
+  final Guid UART_SERVICE_UUID = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+  final Guid UART_TX_UUID = Guid("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
+  final Guid UART_RX_UUID = Guid("6E400002-B5A3-F393-E0A9-E50E24DCCA9E"); // 🆕 RX para enviar datos
+
+  void _updateSteps(int newSteps) {
+    steps = newSteps;
+    notifyListeners();
+  }
+
+  void _updateBpm(int newBpm) {
+    bpm = newBpm;
+    notifyListeners();
+  }
+
+  // =====================
+  // Escaneo BLE
+  // =====================
   Future<void> startScan({int timeoutSeconds = 12}) async {
     if (_isScanning || _isConnecting) return;
 
-    print("🛠️ Verificando permisos...");
-    Map<Permission, PermissionStatus> statuses;
-
     if (Platform.isAndroid) {
-      statuses = await [
-        Permission.location,
+      final status = await [
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
+        Permission.location,
       ].request();
-    } else {
-      statuses = await [Permission.bluetooth].request();
-    }
-
-    if (!statuses.values.every((s) => s.isGranted)) {
-      print("❌ Permisos denegados.");
-      return;
+      if (!status.values.every((s) => s.isGranted)) return;
     }
 
     _availableDevices.clear();
     _isScanning = true;
     notifyListeners();
 
-    print("🔎 Iniciando escaneo BLE...");
     FlutterBluePlus.startScan(timeout: Duration(seconds: timeoutSeconds));
 
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
       for (var result in results) {
         final device = result.device;
-
-        // 🔹 Filtrado flexible para ESP32-S3
-        bool isTargetDevice = device.name == "ESP32S3_UART" ||
-            device.id.id.toLowerCase().contains("esp32");
-
-        bool alreadyAdded = _availableDevices.any((d) => d.id == device.id);
-
-        if (isTargetDevice && !alreadyAdded) {
+        if (device.name == "ESP32S3_UART" &&
+            !_availableDevices.any((d) => d.id == device.id)) {
           _availableDevices.add(device);
           notifyListeners();
-          print("📱 Dispositivo detectado: ${device.name} (${device.id})");
         }
       }
-    }, onError: (e) {
-      print("❌ Error de escaneo: $e");
-      stopScan();
     });
 
-    // Detener escaneo automáticamente
-    Future.delayed(Duration(seconds: timeoutSeconds), () => stopScan());
+    Future.delayed(Duration(seconds: timeoutSeconds), stopScan);
   }
 
-  /// Detiene el escaneo
   Future<void> stopScan() async {
     if (_isScanning) {
       await FlutterBluePlus.stopScan();
       await _scanSubscription?.cancel();
       _isScanning = false;
       notifyListeners();
-      print("🛑 Escaneo detenido.");
     }
   }
 
-  /// Conecta a un dispositivo BLE
+  // =====================
+  // Conexión BLE
+  // =====================
   Future<void> connectToDevice(BluetoothDevice device) async {
     if (_isConnecting || _isConnected) return;
-
-    print("🔗 Conectando a ${device.name}...");
     _isConnecting = true;
     notifyListeners();
 
     try {
-      await device.connect(autoConnect: false);
+      await device.connect(autoConnect: false).timeout(Duration(seconds: 10));
       connectedDevice = device;
       _isConnected = true;
       _isConnecting = false;
       notifyListeners();
-      print("✅ Conectado a ${device.name}");
 
-      _listenToDisconnects(device);
-      await _listenToData(device);
+      device.state.listen((state) {
+        if (state == BluetoothDeviceState.disconnected) {
+          connectedDevice = null;
+          _isConnected = false;
+          _dataSubscription?.cancel();
+          _timeSyncTimer?.cancel();
+          notifyListeners();
+        }
+      });
+
+      await _setupNotifications(device);
+
+      // 🕒 Enviar hora actual al conectar
+      await _sendCurrentTime(device);
+
+      // ⏰ Actualizar hora cada minuto
+      _timeSyncTimer = Timer.periodic(Duration(minutes: 1), (_) async {
+        if (_isConnected && connectedDevice != null) {
+          await _sendCurrentTime(connectedDevice!);
+        }
+      });
     } catch (e) {
-      print("❌ Error al conectar: $e");
-      _isConnecting = false;
+      debugPrint("⚠️ Error al conectar: $e");
       _isConnected = false;
+      _isConnecting = false;
       notifyListeners();
     }
   }
 
-  /// Escucha desconexiones automáticas
-  void _listenToDisconnects(BluetoothDevice device) {
-    device.state.listen((state) {
-      if (state == BluetoothDeviceState.disconnected) {
-        print("❌ Dispositivo desconectado: ${device.name}");
-        _dataSubscription?.cancel();
-        connectedDevice = null;
-        _isConnected = false;
-        notifyListeners();
-      }
-    });
-  }
-
-  /// Suscribe a las características del UART BLE
-  Future<void> _listenToData(BluetoothDevice device) async {
+  // =====================
+  // Enviar hora actual al ESP32
+  // =====================
+  Future<void> _sendCurrentTime(BluetoothDevice device) async {
     try {
-      var services = await device.discoverServices();
+      final services = await device.discoverServices();
       for (var service in services) {
         if (service.uuid == UART_SERVICE_UUID) {
-          for (var characteristic in service.characteristics) {
-            if (characteristic.uuid == UART_TX_UUID && characteristic.properties.notify) {
-              await characteristic.setNotifyValue(true);
-              _dataSubscription = characteristic.value.listen((value) {
-                final data = String.fromCharCodes(value);
-                _processData(data);
-              }, onError: (e) {
-                print("❌ Error escuchando característica: $e");
-              });
-              print("✅ Suscrito a TX: ${characteristic.uuid}");
+          for (var char in service.characteristics) {
+            if (char.uuid == UART_RX_UUID && char.properties.write) {
+              final now = DateTime.now();
+              final formattedTime =
+                  "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+              final message = "TIME:$formattedTime";
+              await char.write(message.codeUnits, withoutResponse: true);
+              debugPrint("🕒 Enviada hora al ESP32: $message");
+              return;
             }
           }
         }
       }
     } catch (e) {
-      print("❌ Error al descubrir servicios: $e");
+      debugPrint("⚠️ Error enviando hora: $e");
     }
   }
 
-  /// Procesa y guarda los datos recibidos
-  void _processData(String data) {
-    if (data.trim().isEmpty) return;
-
-    try {
-      // Ejemplo de datos en formato simplificado
-      // "steps:1000,hr:75,activity:walk"
-      final parts = data.split(',');
-      if (parts.length < 3) return;
-
-      final steps = int.tryParse(parts[0].split(':')[1]);
-      final hr = int.tryParse(parts[1].split(':')[1]);
-      final activity = parts[2].split(':')[1];
-
-      if (steps != null && hr != null) {
-        LocalDatabase.insertData(
-          steps: steps,
-          heartRate: hr,
-          activityType: activity,
-        );
-        print("💾 Guardado: $steps pasos, $hr bpm, actividad: $activity");
+  // =====================
+  // Notificaciones desde ESP32
+  // =====================
+  Future<void> _setupNotifications(BluetoothDevice device) async {
+    final services = await device.discoverServices();
+    for (var service in services) {
+      if (service.uuid == UART_SERVICE_UUID) {
+        for (var char in service.characteristics) {
+          if (char.uuid == UART_TX_UUID && char.properties.notify) {
+            await char.setNotifyValue(true);
+            _dataSubscription = char.value.listen((data) {
+              final text = String.fromCharCodes(data); // "STEPS:3500,BPM:85"
+              final parts = text.split(',');
+              for (var p in parts) {
+                final kv = p.split(':');
+                if (kv.length == 2) {
+                  if (kv[0].toUpperCase() == 'STEPS') _updateSteps(int.tryParse(kv[1]) ?? 0);
+                  if (kv[0].toUpperCase() == 'BPM') _updateBpm(int.tryParse(kv[1]) ?? 0);
+                }
+              }
+            });
+          }
+        }
       }
-    } catch (e) {
-      print("❌ Error procesando datos: $e");
     }
   }
 
-  // =========================================================
-  // 🔷 Funciones de Bluetooth
-  // =========================================================
-
-  Future<bool> isBluetoothEnabled() async {
-    try {
-      final state = await FlutterBluePlus.adapterStateNow;
-      return state == BluetoothAdapterState.on;
-    } catch (e) {
-      print("⚠️ Error verificando Bluetooth: $e");
-      return false;
-    }
-  }
-
-  String get connectedDeviceName => connectedDevice?.name ?? "";
-
-  Future<void> disableBluetooth() async {
-    try {
-      if (Platform.isAndroid) {
-        await FlutterBluePlus.turnOff();
-        print("🔵 Bluetooth apagado.");
-        await disconnect();
-      }
-    } catch (e) {
-      print("❌ Error apagando Bluetooth: $e");
-    }
+  // =====================
+  // Encender/apagar BLE
+  // =====================
+  Future<void> enableBluetooth() async {
+    if (Platform.isAndroid) await FlutterBluePlus.turnOn();
     notifyListeners();
   }
 
-  Future<void> enableBluetooth() async {
-    try {
-      if (Platform.isAndroid) {
-        await FlutterBluePlus.turnOn();
-        print("🔵 Bluetooth activado.");
-      }
-    } catch (e) {
-      print("❌ Error activando Bluetooth: $e");
-    }
+  Future<void> disableBluetooth() async {
+    if (Platform.isAndroid) await FlutterBluePlus.turnOff();
+    await disconnect();
     notifyListeners();
   }
 
   Future<void> disconnect() async {
     await _scanSubscription?.cancel();
     await _dataSubscription?.cancel();
-
-    if (connectedDevice != null) {
-      await connectedDevice!.disconnect();
-      print("🔌 Desconectado de ${connectedDevice!.name}");
-      connectedDevice = null;
-    }
-
+    _timeSyncTimer?.cancel();
+    if (connectedDevice != null) await connectedDevice!.disconnect();
+    connectedDevice = null;
     _isConnected = false;
     _isConnecting = false;
     notifyListeners();
+  }
+
+  Future<bool> isBluetoothEnabled() async {
+    try {
+      final state = FlutterBluePlus.adapterStateNow;
+      return state == BluetoothAdapterState.on;
+    } catch (_) {
+      return false;
+    }
   }
 }

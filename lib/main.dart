@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 // --- AJUSTA ESTAS RUTAS SEGÚN TU PROYECTO ---
 import '../modules/database/local_database.dart'; 
 import '../modules/bluetooth/bluetooth_service.dart'; 
-import 'screens/dashboard_screen.dart'; 
 import 'screens/home_screen_manager.dart'; // <-- AÑADIDO
 // ---------------------------------------------
 
@@ -20,7 +19,7 @@ void main() async { // 1. Añade 'async'
   // 4. El resto de tu app
   runApp(
     ChangeNotifierProvider(
-      create: (context) => BluetoothService(),
+      create: (context) => BluetoothProvider(),
       child: const MyApp(),
     ),
   );
