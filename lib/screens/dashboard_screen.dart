@@ -14,7 +14,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-
   Widget buildSimpleMetricContent(String metric, String unit) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,10 +77,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  enabled ? 'Bluetooth activado' : 'Bluetooth desactivado',
+                                  enabled
+                                      ? 'Bluetooth activado'
+                                      : 'Bluetooth desactivado',
                                   style: textStyle.copyWith(
                                     fontSize: 16,
-                                    color: enabled ? kDarkPrimaryText : Colors.redAccent,
+                                    color: enabled
+                                        ? kDarkPrimaryText
+                                        : Colors.redAccent,
                                   ),
                                 ),
                                 if (connectedDeviceName.isNotEmpty)
@@ -97,7 +100,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           IconButton(
                             icon: Icon(
-                              enabled ? Icons.toggle_on : Icons.toggle_off_outlined,
+                              enabled
+                                  ? Icons.toggle_on
+                                  : Icons.toggle_off_outlined,
                               color: enabled ? kAccentColor : Colors.grey,
                               size: 36,
                             ),
@@ -118,11 +123,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       icon: Icon(
-                        isScanning ? Icons.hourglass_bottom : Icons.search_rounded,
+                        isScanning
+                            ? Icons.hourglass_bottom
+                            : Icons.search_rounded,
                         color: Colors.white,
                       ),
                       label: Text(
-                        isScanning ? "Buscando dispositivos..." : "Buscar dispositivos cercanos",
+                        isScanning
+                            ? "Buscando dispositivos..."
+                            : "Buscar dispositivos cercanos",
                         style: textStyle.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -167,10 +176,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 child: ListTile(
                                   leading: Icon(
                                     Icons.watch,
-                                    color: connected ? kAccentColor : kDarkSecondaryText,
+                                    color: connected
+                                        ? kAccentColor
+                                        : kDarkSecondaryText,
                                   ),
                                   title: Text(
-                                    device.name.isNotEmpty ? device.name : "Sin nombre",
+                                    device.name.isNotEmpty
+                                        ? device.name
+                                        : "Sin nombre",
                                     style: titleStyle,
                                   ),
                                   subtitle: Text(
@@ -179,7 +192,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                   trailing: ElevatedButton(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: connected ? Colors.redAccent : kAccentColor,
+                                      backgroundColor: connected
+                                          ? Colors.redAccent
+                                          : kAccentColor,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
@@ -188,7 +203,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       if (connected) {
                                         await btProvider.disconnect();
                                       } else {
-                                        await btProvider.connectToDevice(device);
+                                        await btProvider.connectToDevice(
+                                          device,
+                                        );
                                       }
                                     },
                                     child: Text(
@@ -227,7 +244,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Menu de inicio', style: h1Style),
-            Text('Friday, 10 August', style: textStyle.copyWith(color: kDarkSecondaryText)),
+            Text(
+              'Friday, 10 August',
+              style: textStyle.copyWith(color: kDarkSecondaryText),
+            ),
           ],
         ),
         toolbarHeight: 80,
@@ -238,8 +258,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.only(right: 20.0),
                 child: IconButton(
                   icon: Icon(
-                    btProvider.isConnected ? Icons.bluetooth_connected : Icons.bluetooth,
-                    color: btProvider.isConnected ? Colors.blueAccent : kDarkSecondaryText,
+                    btProvider.isConnected
+                        ? Icons.bluetooth_connected
+                        : Icons.bluetooth,
+                    color: btProvider.isConnected
+                        ? Colors.blueAccent
+                        : kDarkSecondaryText,
                   ),
                   onPressed: () => _showBluetoothModal(context),
                 ),
@@ -277,16 +301,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         },
                       ),
                       const SizedBox(height: cardSpacing),
-                      DashboardCard(
-                        title: 'Distance',
-                        content: buildSimpleMetricContent('3.8', 'Kilometers'),
+                      Consumer<BluetoothProvider>(
+                        builder: (context, bt, child) {
+                          return DashboardCard(
+                            title: 'Distance',
+                            content: buildSimpleMetricContent(
+                              bt.distanceKm.toStringAsFixed(2),
+                              'Kilometers',
+                            ),
+                          );
+                        },
                       ),
+
                       const SizedBox(height: cardSpacing),
                       Consumer<BluetoothProvider>(
                         builder: (context, bt, child) {
                           return DashboardCard(
                             title: 'Heart',
-                            content: buildSimpleMetricContent(bt.bpm.toString(), 'BPM'),
+                            content: buildSimpleMetricContent(
+                              bt.bpm.toString(),
+                              'BPM',
+                            ),
                           );
                         },
                       ),
@@ -300,7 +335,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       DashboardCard(
                         title: 'Streaks',
                         cardColor: kAccentColor,
-                        content: buildStreaksContent('5 Days', 'Hitting 6K+ steps'),
+                        content: buildStreaksContent(
+                          '5 Days',
+                          'Hitting 6K+ steps',
+                        ),
                       ),
                       const SizedBox(height: cardSpacing),
                       LastSleepCard(

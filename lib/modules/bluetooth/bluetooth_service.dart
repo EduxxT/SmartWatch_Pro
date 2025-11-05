@@ -22,15 +22,19 @@ class BluetoothProvider with ChangeNotifier {
   bool get isScanning => _isScanning;
 
   final List<BluetoothDevice> _availableDevices = [];
-  List<BluetoothDevice> get availableDevices => List.unmodifiable(_availableDevices);
+  List<BluetoothDevice> get availableDevices =>
+      List.unmodifiable(_availableDevices);
 
   // Datos ESP32
   int steps = 0;
   int bpm = 0;
+  double distanceKm = 0;
 
   final Guid UART_SERVICE_UUID = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
   final Guid UART_TX_UUID = Guid("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
-  final Guid UART_RX_UUID = Guid("6E400002-B5A3-F393-E0A9-E50E24DCCA9E"); // 🆕 RX para enviar datos
+  final Guid UART_RX_UUID = Guid(
+    "6E400002-B5A3-F393-E0A9-E50E24DCCA9E",
+  ); // 🆕 RX para enviar datos
 
   void _updateSteps(int newSteps) {
     steps = newSteps;
@@ -39,6 +43,11 @@ class BluetoothProvider with ChangeNotifier {
 
   void _updateBpm(int newBpm) {
     bpm = newBpm;
+    notifyListeners();
+  }
+
+  void _updateDistance(double newDistance) {
+    distanceKm = newDistance;
     notifyListeners();
   }
 
@@ -167,13 +176,19 @@ class BluetoothProvider with ChangeNotifier {
           if (char.uuid == UART_TX_UUID && char.properties.notify) {
             await char.setNotifyValue(true);
             _dataSubscription = char.value.listen((data) {
-              final text = String.fromCharCodes(data); // "STEPS:3500,BPM:85"
+              final text = String.fromCharCodes(
+                data,
+              ); // "STEPS:3500,BPM:85,DIST:2.4"
               final parts = text.split(',');
               for (var p in parts) {
                 final kv = p.split(':');
                 if (kv.length == 2) {
-                  if (kv[0].toUpperCase() == 'STEPS') _updateSteps(int.tryParse(kv[1]) ?? 0);
-                  if (kv[0].toUpperCase() == 'BPM') _updateBpm(int.tryParse(kv[1]) ?? 0);
+                  final key = kv[0].toUpperCase();
+                  final value = kv[1];
+                  if (key == 'STEPS') _updateSteps(int.tryParse(value) ?? 0);
+                  if (key == 'BPM') _updateBpm(int.tryParse(value) ?? 0);
+                  if (key == 'DIST' || key == 'DISTANCE')
+                    _updateDistance(double.tryParse(value) ?? 0.0);
                 }
               }
             });
