@@ -75,11 +75,16 @@ class BluetoothProvider with ChangeNotifier {
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
       for (var result in results) {
         final device = result.device;
-        if (device.name == "ESP32S3_UART" &&
-            !_availableDevices.any((d) => d.id == device.id)) {
-          _availableDevices.add(device);
-          notifyListeners();
-        }
+        String name = result.advertisementData.localName;
+if (name.isEmpty) name = device.name; // fallback
+
+if (name.contains("ESP32S3")) {
+  if (!_availableDevices.any((d) => d.id == device.id)) {
+    _availableDevices.add(device);
+    notifyListeners();
+  }
+}
+
       }
     });
 
@@ -187,8 +192,9 @@ class BluetoothProvider with ChangeNotifier {
                   final value = kv[1];
                   if (key == 'STEPS') _updateSteps(int.tryParse(value) ?? 0);
                   if (key == 'BPM') _updateBpm(int.tryParse(value) ?? 0);
-                  if (key == 'DIST' || key == 'DISTANCE')
+                  if (key == 'DIST' || key == 'DISTANCE') {
                     _updateDistance(double.tryParse(value) ?? 0.0);
+                  }
                 }
               }
             });
