@@ -276,86 +276,97 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: SingleChildScrollView(
   padding: const EdgeInsets.all(20.0),
   child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const BannerConFondoHora(),
       const SizedBox(height: cardSpacing),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      Consumer<BluetoothProvider>(
-                        builder: (context, bt, child) {
-                          return CircularMetricCard(
-                            title: 'Walk',
-                            metricText: bt.steps.toString(),
-                            unitText: 'Steps',
-                            percent: (bt.steps / 6000).clamp(0.0, 1.0),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: cardSpacing),
-                      Consumer<BluetoothProvider>(
-                        builder: (context, bt, child) {
-                          return DashboardCard(
-                            title: 'Distance',
-                            content: buildSimpleMetricContent(
-                              bt.distanceKm.toStringAsFixed(2),
-                              'Kilometers',
-                            ),
-                          );
-                        },
-                      ),
 
-                      const SizedBox(height: cardSpacing),
-                      Consumer<BluetoothProvider>(
-                        builder: (context, bt, child) {
-                          return DashboardCard(
-                            title: 'Heart',
-                            content: buildSimpleMetricContent(
-                              bt.bpm.toString(),
-                              'BPM',
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+      // 🔹 Contenedor del grid de 2x2
+      GridView.count(
+        crossAxisCount: 2, // 2 columnas
+        shrinkWrap: true, // para que se ajuste al contenido
+        physics: const NeverScrollableScrollPhysics(), // evita scroll interno
+        crossAxisSpacing: cardSpacing,
+        mainAxisSpacing: cardSpacing,
+        childAspectRatio: 1, // cuadradas (ajusta a 1.1 o 0.9 según prefieras)
+        children: [
+          // 🔸 Tarjeta 1 - Pasos
+          Consumer<BluetoothProvider>(
+            builder: (context, bt, child) {
+              return CircularMetricCard(
+                title: 'Walk',
+                metricText: bt.steps.toString(),
+                unitText: 'Steps',
+                percent: (bt.steps / 6000).clamp(0.0, 1.0),
+              );
+            },
+          ),
+
+          // 🔸 Tarjeta 2 - Distancia
+          Consumer<BluetoothProvider>(
+            builder: (context, bt, child) {
+              return DashboardCard(
+                title: 'Distance',
+                content: buildSimpleMetricContent(
+                  bt.distanceKm.toStringAsFixed(2),
+                  'Kilometers',
                 ),
-                const SizedBox(width: cardSpacing),
-                Expanded(
-                  child: Column(
-                    children: [
-                      DashboardCard(
-                        title: 'Streaks',
-                        cardColor: kAccentColor,
-                        content: buildStreaksContent(
-                          '5 Days',
-                          'Hitting 6K+ steps',
-                        ),
-                      ),
-                      const SizedBox(height: cardSpacing),
-                      LastSleepCard(
-                        duration: '7H 46M',
-                        timeRange: '12:00 AM - 9:50 AM',
-                        hintText: 'Try to sleep earlier tonight',
-                      ),
-                      const SizedBox(height: cardSpacing),
-                      CircularMetricCard(
-                        title: 'Battery',
-                        metricText: '90',
-                        unitText: 'Percent',
-                        percent: 0.90,
-                      ),
-                    ],
-                  ),
+              );
+            },
+          ),
+
+          // 🔸 Tarjeta 3 - Ritmo cardíaco
+          Consumer<BluetoothProvider>(
+            builder: (context, bt, child) {
+              return DashboardCard(
+                title: 'Heart',
+                content: buildSimpleMetricContent(
+                  bt.bpm.toString(),
+                  'BPM',
                 ),
-              ],
+              );
+            },
+          ),
+
+          // 🔸 Tarjeta 4 - Sueño (ajustada en tamaño)
+          AspectRatio(
+            aspectRatio: 1 / 1.1, // un poco más compacta
+            child: LastSleepCard(
+              duration: '7H 46M',
+              timeRange: '12:00 AM - 9:50 AM',
+              hintText: 'Try to sleep earlier tonight 😴',
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+
+      const SizedBox(height: cardSpacing),
+
+      // 🔹 Fila final si quieres agregar más métricas
+      Row(
+        children: [
+          Expanded(
+            child: DashboardCard(
+              title: 'Streaks',
+              cardColor: kAccentColor,
+              content: buildStreaksContent('5 Days', 'Hitting 6K+ steps'),
+            ),
+          ),
+          const SizedBox(width: cardSpacing),
+          const Expanded(
+            child: CircularMetricCard(
+              title: 'Battery',
+              metricText: '90',
+              unitText: 'Percent',
+              percent: 0.90,
+            ),
+          ),
+        ],
+      ),
+    ],
+  ),
+),
+
     );
   }
 }

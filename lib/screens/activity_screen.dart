@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../modules/bluetooth/bluetooth_service.dart';
+import '../modules/database/local_database.dart';
 import '../utils/app_theme.dart';
 import '../widgets/sleep_header_card.dart';
 import '../widgets/goal_quality_card.dart';
@@ -19,10 +20,20 @@ class _ActivityScreenState extends State<ActivityScreen> {
   List<Map<String, dynamic>> weeklyData = [];
   int streak = 0;
 
+Future<void> _loadGoalStepsFromDB() async {
+  final savedGoal = await LocalDatabase.getGoal("steps");
+  if (savedGoal != null) {
+    setState(() {
+      goalSteps = savedGoal;
+    });
+  }
+}
+
   @override
   void initState() {
     super.initState();
     _initializeWeek();
+    _loadGoalStepsFromDB();
   }
 
   void _initializeWeek() {
@@ -119,11 +130,12 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              onPressed: () {
+              onPressed: () async {
                 setState(() {
                   goalSteps = tempGoal;
                   _calculateStreak();
                 });
+                  await LocalDatabase.saveGoal("steps", goalSteps); // 👈 Guardar en SQLite
                 Navigator.pop(context);
               },
               child: const Text(

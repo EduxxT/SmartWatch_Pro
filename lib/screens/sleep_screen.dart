@@ -4,6 +4,8 @@ import '../widgets/sleep_header_card.dart';
 import '../widgets/goal_quality_card.dart';
 import '../widgets/week_days_graph.dart';
 import '../widgets/last_sleep_card.dart';
+import '../modules/bluetooth/bluetooth_service.dart';
+import 'package:provider/provider.dart';
 
 class SleepScreen extends StatefulWidget {
   const SleepScreen({super.key});
@@ -29,10 +31,12 @@ class _SleepScreenState extends State<SleepScreen> {
   int strikeCount = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _calculateStrike();
-  }
+void initState() {
+  super.initState();
+  final bluetoothProvider = Provider.of<BluetoothProvider>(context, listen: false);
+  goalHours = bluetoothProvider.goalHours;
+  _calculateStrike();
+}
 
   void _calculateStrike() {
     int streak = 0;
@@ -52,6 +56,8 @@ class _SleepScreenState extends State<SleepScreen> {
   await showDialog(
     context: context,
     builder: (context) {
+      final bluetoothProvider = Provider.of<BluetoothProvider>(context, listen: false);
+
       return AlertDialog(
         backgroundColor: kDarkSecondaryBackground,
         shape: RoundedRectangleBorder(
@@ -109,11 +115,15 @@ class _SleepScreenState extends State<SleepScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
+              // ✅ Guarda en el provider (y por ende, en SQLite)
+              await bluetoothProvider.updateSleepGoal(tempGoal);
+
               setState(() {
                 goalHours = tempGoal;
                 _calculateStrike();
               });
+
               Navigator.pop(context);
             },
             child: const Text(
@@ -129,6 +139,7 @@ class _SleepScreenState extends State<SleepScreen> {
     },
   );
 }
+
 
 
   @override
@@ -205,11 +216,18 @@ class _SleepScreenState extends State<SleepScreen> {
             const SizedBox(height: cardSpacing),
 
             // 4. Última sesión de sueño
-            LastSleepCard(
-              duration: '${lastNight['hours']} H',
-              timeRange: '12:00 AM - 8:00 AM',
-              hintText: 'Try to sleep earlier tonight 😴',
-            ),
+            Padding(
+  padding: const EdgeInsets.only(bottom: 10.0),
+  child: AspectRatio(
+    aspectRatio: 1 / 0.6, // controla la proporción vertical
+    child: LastSleepCard(
+      duration: '${lastNight['hours']} H',
+      timeRange: '12:00 AM - 8:00 AM',
+      hintText: 'Try to sleep earlier tonight 😴',
+    ),
+  ),
+),
+
           ],
         ),
       ),

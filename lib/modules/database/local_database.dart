@@ -6,7 +6,7 @@ class LocalDatabase {
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('smartwatch_data.db');
+    _database = await _initDB('smartwatch.db');
     return _database!;
   }
 
@@ -16,75 +16,143 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // 👈 Aumenta versión si ya existe
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
     );
   }
 
   static Future _createDB(Database db, int version) async {
     await db.execute('''
-      CREATE TABLE activity_data (
+  CREATE TABLE activity_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT,
+    steps INTEGER,
+    heart_rate INTEGER,
+    distance REAL,
+    goal INTEGER,
+    activity_type TEXT
+  )
+''');
+
+
+    // 🆕 Tabla para metas (pasos, sueño, etc.)
+    await db.execute('''
+      CREATE TABLE goals (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT,
-        steps INTEGER,
-        heart_rate INTEGER,
-        activity_type TEXT
+        goal_type TEXT UNIQUE,
+        goal_value REAL
       )
     ''');
   }
 
-  static Future<void> insertData({
-    required int steps,
-    required int heartRate,
-    required String activityType,
-  }) async {
+  static Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS goals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          goal_type TEXT UNIQUE,
+          goal_value REAL
+        )
+      ''');
+    }
+  }
+
+  // ==================================================
+  // MÉTODOS PARA GUARDAR Y LEER DATOS DE METAS
+  // ==================================================
+
+  static Future<void> saveGoal(String goalType, double value) async {
     final db = await database;
-    await db.insert('activity_data', {
+    await db.insert(
+      'goals',
+      {'goal_type': goalType, 'goal_value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+// 💤 Guardar meta de sueño (en horas)
+static Future<void> saveSleepGoal(double hours) async {
+  final db = await database;
+  await db.insert(
+    'goals',
+    {'goal_type': 'sleep', 'goal_value': hours},
+    conflictAlgorithm: ConflictAlgorithm.replace,
+  );
+}
+
+// 💤 Obtener meta de sueño (en horas)
+static Future<double> getSleepGoal() async {
+  final db = await database;
+  final result = await db.query(
+    'goals',
+    where: 'goal_type = ?',
+    whereArgs: ['sleep'],
+    limit: 1,
+  );
+  if (result.isNotEmpty) {
+    return result.first['goal_value'] as double;
+  } else {
+    return 8.0; // valor por defecto
+  }
+}
+
+
+  static Future<void> insertData({
+  required int steps,
+  required int heartRate,
+  required double distance,
+  required int goal,
+  String activityType = 'walk',
+}) async {
+  final db = await database;
+
+  await db.insert(
+    'activity_data',
+    {
       'timestamp': DateTime.now().toIso8601String(),
       'steps': steps,
       'heart_rate': heartRate,
       'activity_type': activityType,
-    });
-  }
+      'distance': distance,
+      'goal': goal,
+    },
+    conflictAlgorithm: ConflictAlgorithm.replace,
+  );
+}
 
-  static Future<List<Map<String, dynamic>>> getAllData() async {
+  static Future<Map<String, dynamic>?> getLastRecord() async {
+  final db = await database;
+
+  // Asegúrate de tener una tabla llamada 'activity_data' o similar
+  final result = await db.query(
+    'activity_data',
+    orderBy: 'timestamp DESC',
+    limit: 1,
+  );
+
+  if (result.isNotEmpty) {
+    return result.first;
+  }
+  return null;
+}
+
+  static Future<double?> getGoal(String goalType) async {
     final db = await database;
-    return await db.query('activity_data', orderBy: 'id DESC');
+    final result = await db.query(
+      'goals',
+      where: 'goal_type = ?',
+      whereArgs: [goalType],
+      limit: 1,
+    );
+    if (result.isNotEmpty) {
+      return result.first['goal_value'] as double?;
+    }
+    return null;
   }
 
-  // --- FUNCIÓN DE PRUEBA AÑADIDA ---
+  // 🧪 (opcional) Verificar conexión
   static Future<void> testConnection() async {
-    print("🔌 Iniciando prueba de conexión BD (sqflite)...");
-    try {
-      // Paso 1: Inicializar (esto lo hace el getter 'database' automáticamente)
-      print("  -> Obteniendo instancia de la base de datos...");
-      final db = await database; 
-      print("  -> Instancia de BD obtenida. (Path: ${db.path})");
-
-      // Paso 2: Escribir un dato de prueba usando TU método
-      print("  -> Escribiendo un registro de prueba...");
-      await insertData(
-        steps: 100,
-        heartRate: 80,
-        activityType: "test_walk"
-      );
-      print("  -> Escritura completada.");
-
-      // Paso 3: Leer el dato de vuelta usando TU método
-      print("  -> Leyendo todos los registros...");
-      final List<Map<String, dynamic>> data = await getAllData();
-
-      // Paso 4: Verificar
-      if (data.isNotEmpty) {
-        print("  -> ¡ÉXITO! Se encontraron ${data.length} registros.");
-        // Imprimimos el primer registro (que es el último insertado por tu 'orderBy')
-        print("  -> Último registro insertado: ${data.first}"); 
-      } else {
-        print("  -> ¡FALLO! No se encontraron registros después de insertar.");
-      }
-
-    } catch (e) {
-      print("❌ ERROR DURANTE LA PRUEBA DE CONEXIÓN A BD: $e");
-    }
+    final db = await database;
+    print("✅ SQLite conectado en: ${db.path}");
   }
 }

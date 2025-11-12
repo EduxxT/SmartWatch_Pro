@@ -12,9 +12,6 @@ void main() async { // 1. Añade 'async'
   WidgetsFlutterBinding.ensureInitialized(); 
 
   // 3. Llama a tu nueva función de prueba
-  print("--- INICIANDO PRUEBA DE BASE DE DATOS ---");
-  await LocalDatabase.testConnection();
-  print("--- PRUEBA DE BASE DE DATOS TERMINADA ---");
 
   // 4. El resto de tu app
   runApp(
