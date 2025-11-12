@@ -1,40 +1,78 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../modules/bluetooth/bluetooth_service.dart';
 import '../utils/app_theme.dart';
-import '../widgets/sleep_header_card.dart'; // Reutilizamos el header circular
-import '../widgets/goal_quality_card.dart'; // Reutilizamos la tarjeta de meta
-import '../widgets/week_days_graph.dart'; // Reutilizamos la gráfica
-import '../widgets/dashboard_card.dart'; // Reutilizamos la tarjeta base
+import '../widgets/sleep_header_card.dart';
+import '../widgets/goal_quality_card.dart';
+import '../widgets/week_days_graph.dart';
+import '../widgets/dashboard_card.dart';
 
-class ActivityScreen extends StatelessWidget {
-  const ActivityScreen({Key? key}) : super(key: key);
+class ActivityScreen extends StatefulWidget {
+  const ActivityScreen({super.key});
 
-  // Datos de mock para la gráfica de actividad
-  static final List<Map<String, dynamic>> _mockActivityData = [
-    {'day': 'M', 'factor': 0.7, 'label': '2,390', 'hours': '2.3k'}, // Cambiado 'hours' a 'label'
-    {'day': 'T', 'factor': 0.8, 'label': '3.8', 'hours': '3.8k'},
-    {'day': 'W', 'factor': 0.9, 'label': '4,500', 'hours': '4.5k'},
-    {'day': 'T', 'factor': 0.75, 'label': '2.1', 'hours': '2.1k'},
-    {'day': 'F', 'factor': 0.85, 'label': '5,100', 'hours': '5.1k'},
-    {'day': 'S', 'factor': 0.95, 'label': '6.0', 'hours': '6.0k'},
-    {'day': 'S', 'factor': 0.8, 'label': '4,800', 'hours': '4.8k'},
-  ];
+  @override
+  State<ActivityScreen> createState() => _ActivityScreenState();
+}
 
-  // Helper Widget para la información debajo de la gráfica
-  Widget _buildGraphLabels() {
+class _ActivityScreenState extends State<ActivityScreen> {
+  static const int goalSteps = 5000; // Meta diaria
+  List<Map<String, dynamic>> weeklyData = []; // Datos semanales de pasos
+  int streak = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeWeek();
+  }
+
+  void _initializeWeek() {
+    // Crear 7 días vacíos
+    final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    weeklyData = List.generate(
+      7,
+      (i) => {
+        'day': days[i],
+        'steps': 0,
+        'factor': 0.0,
+      },
+    );
+  }
+
+  void _updateWeekData(int newSteps) {
+    final today = DateTime.now().weekday - 1; // 0 = Lunes
+    weeklyData[today]['steps'] = newSteps;
+    weeklyData[today]['factor'] =
+        (newSteps / goalSteps).clamp(0.0, 1.0); // Factor 0–1
+    _calculateStreak();
+  }
+
+  void _calculateStreak() {
+    int newStreak = 0;
+    for (var d in weeklyData) {
+      if ((d['steps'] as int) >= goalSteps) {
+        newStreak++;
+      } else {
+        newStreak = 0;
+      }
+    }
+    setState(() {
+      streak = newStreak;
+    });
+  }
+
+  Widget _buildGraphLabels(int steps, double distanceKm) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // USAMOS Expanded para asegurar que los Column internos no causen conflictos
-          // y que se dividan el espacio uniformemente
-          Expanded( 
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Steps', style: textStyle.copyWith(color: kDarkSecondaryText)),
-                Text('2,390', style: titleStyle.copyWith(color: kDarkPrimaryText)), // Mock Data
-                Text('M', style: textStyle.copyWith(color: kDarkSecondaryText)),
+                Text('$steps', style: titleStyle.copyWith(color: kDarkPrimaryText)),
+                Text('Today', style: textStyle.copyWith(color: kDarkSecondaryText)),
               ],
             ),
           ),
@@ -42,13 +80,13 @@ class ActivityScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Kilometers', style: textStyle.copyWith(color: kDarkSecondaryText)),
-                Text('3.8', style: titleStyle.copyWith(color: kDarkPrimaryText)), // Mock Data
-                Text('T', style: textStyle.copyWith(color: kDarkSecondaryText)),
+                Text('Distance', style: textStyle.copyWith(color: kDarkSecondaryText)),
+                Text('${distanceKm.toStringAsFixed(2)} km',
+                    style: titleStyle.copyWith(color: kDarkPrimaryText)),
+                Text('Goal: $goalSteps', style: textStyle.copyWith(color: kDarkSecondaryText)),
               ],
             ),
           ),
-          // El resto de los días no tienen labels debajo en la imagen
         ],
       ),
     );
@@ -58,89 +96,99 @@ class ActivityScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     const double screenPadding = 20.0;
     const double cardSpacing = 20.0;
-    
-    return Scaffold(
-      backgroundColor: kDarkPrimaryBackground,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        titleSpacing: screenPadding,
-        title: Text('My Activity', style: h1Style),
-        toolbarHeight: 80,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(screenPadding),
-        child: Column(
-          children: [
-            // 1. Cabecera de Actividad (Reutilizando SleepHeaderCard)
-            SleepHeaderCard(
-              currentHours: 6.5, 
-              goalHours: 10.0, 
-              // Usamos las claves existentes, aunque el nombre es engañoso para Activity
-              // La implementación real de SleepHeaderCard probablemente no tiene metricLabel
-              // Simplemente adaptamos los datos.
-            ),
-            
-            const SizedBox(height: cardSpacing),
-            
-            // 2. Gráfica de Días de la Semana (Reutilizando WeekDaysGraph)
-            // Ya tiene altura fija implícita gracias a la barra de 100.0
-            WeekDaysGraph(
-              sleepData: _mockActivityData, 
-            ),
-            
-            const SizedBox(height: 10),
-            
-            // Labels de la gráfica (Steps y Kilometers)
-            _buildGraphLabels(),
-            
-            const SizedBox(height: cardSpacing),
-            
-            // 3. Tarjetas de Meta y Tiempo Activo (Fila de 2)
-            Row(
+
+    return Consumer<BluetoothProvider>(
+  builder: (context, ble, _) {
+    // ✅ Ejecutar después del build actual
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateWeekData(ble.steps);
+    });
+
+        return Scaffold(
+          backgroundColor: kDarkPrimaryBackground,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            titleSpacing: screenPadding,
+            title: Text('My Activity', style: h1Style),
+            toolbarHeight: 80,
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(screenPadding),
+            child: Column(
               children: [
-                // CORRECCIÓN CLAVE: Envolver en Expanded para dividir el espacio horizontal.
-                Expanded( // <-- AÑADIDO
-                  child: GoalQualityCard(
-                    title: 'Set Goal',
-                    subtitle: '5000',
-                    backgroundColor: kAccentColor,
-                    titleColor: kDarkPrimaryText,
-                  ),
+                // 1️⃣ Encabezado circular
+                SleepHeaderCard(
+                  currentHours: ble.steps.toDouble(),
+                  goalHours: goalSteps.toDouble(),
+                  metricLabel: "Steps",
                 ),
-                
-                const SizedBox(width: cardSpacing),
-                
-                // CORRECCIÓN CLAVE: Envolver en Expanded para dividir el espacio horizontal.
-                Expanded( // <-- AÑADIDO
-                  child: GoalQualityCard(
-                    title: 'Active Time',
-                    subtitle: 'Keep moving!',
-                    backgroundColor: kDarkSecondaryBackground,
-                    titleColor: kDarkPrimaryText,
+
+                const SizedBox(height: cardSpacing),
+
+                // 2️⃣ Gráfica semanal
+                WeekDaysGraph(
+                  sleepData: weeklyData
+                      .map((d) => {
+                            'day': d['day'],
+                            'factor': d['factor'],
+                            'hours': '${d['steps']}',
+                          })
+                      .toList(),
+                ),
+
+                const SizedBox(height: 10),
+
+                // 3️⃣ Etiquetas debajo de la gráfica
+                _buildGraphLabels(ble.steps, ble.distanceKm),
+
+                const SizedBox(height: cardSpacing),
+
+                // 4️⃣ Tarjetas: Meta y Racha
+                Row(
+                  children: [
+                    Expanded(
+                      child: GoalQualityCard(
+                        title: 'Set Goal',
+                        subtitle: '$goalSteps',
+                        backgroundColor: kAccentColor,
+                        titleColor: kDarkPrimaryText,
+                      ),
+                    ),
+                    const SizedBox(width: cardSpacing),
+                    Expanded(
+                      child: GoalQualityCard(
+                        title: 'Streak',
+                        subtitle: '$streak days',
+                        backgroundColor: kDarkSecondaryBackground,
+                        titleColor: kDarkPrimaryText,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: cardSpacing),
+
+                // 5️⃣ Tarjeta motivacional
+                DashboardCard(
+                  title: "Let's Move!",
+                  content: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        ble.steps >= goalSteps
+                            ? '🔥 Great job! You hit your goal today.'
+                            : 'Keep it up! You\'re getting closer!',
+                        style: textStyle.copyWith(color: kDarkSecondaryText),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            
-            const SizedBox(height: cardSpacing),
-            
-            // 4. Tarjeta "Let's Move!" (Usando DashboardCard)
-            DashboardCard(
-              title: "Let's Move!",
-              content: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'A good start! You\'ve got this',
-                    style: textStyle.copyWith(color: kDarkSecondaryText),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

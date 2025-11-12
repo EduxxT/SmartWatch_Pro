@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:provider/provider.dart';
 
 // =====================
 // Bluetooth Provider
@@ -12,7 +11,7 @@ class BluetoothProvider with ChangeNotifier {
   BluetoothDevice? connectedDevice;
   StreamSubscription? _scanSubscription;
   StreamSubscription<List<int>>? _dataSubscription;
-  Timer? _timeSyncTimer; // ⏰ Timer para sincronizar la hora
+  Timer? _timeSyncTimer; // ⏰ Sincronización de hora
 
   bool _isConnecting = false;
   bool _isConnected = false;
@@ -22,20 +21,21 @@ class BluetoothProvider with ChangeNotifier {
   bool get isScanning => _isScanning;
 
   final List<BluetoothDevice> _availableDevices = [];
-  List<BluetoothDevice> get availableDevices =>
-      List.unmodifiable(_availableDevices);
+  List<BluetoothDevice> get availableDevices => List.unmodifiable(_availableDevices);
 
-  // Datos ESP32
+  // ===== Datos recibidos del ESP32 =====
   int steps = 0;
   int bpm = 0;
-  double distanceKm = 0;
+  double distanceKm = 0.0;
 
+  // UUIDs del servicio UART del ESP32
   final Guid UART_SERVICE_UUID = Guid("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
   final Guid UART_TX_UUID = Guid("6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
-  final Guid UART_RX_UUID = Guid(
-    "6E400002-B5A3-F393-E0A9-E50E24DCCA9E",
-  ); // 🆕 RX para enviar datos
+  final Guid UART_RX_UUID = Guid("6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
 
+  // =====================
+  // Actualizaciones locales
+  // =====================
   void _updateSteps(int newSteps) {
     steps = newSteps;
     notifyListeners();
@@ -63,7 +63,11 @@ class BluetoothProvider with ChangeNotifier {
         Permission.bluetoothConnect,
         Permission.location,
       ].request();
-      if (!status.values.every((s) => s.isGranted)) return;
+
+      if (!status.values.every((s) => s.isGranted)) {
+        debugPrint("⚠️ Permisos BLE denegados");
+        return;
+      }
     }
 
     _availableDevices.clear();
@@ -75,16 +79,16 @@ class BluetoothProvider with ChangeNotifier {
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
       for (var result in results) {
         final device = result.device;
-        String name = result.advertisementData.localName;
-if (name.isEmpty) name = device.name; // fallback
+        String name = result.advertisementData.localName.isNotEmpty
+            ? result.advertisementData.localName
+            : device.name;
 
-if (name.contains("ESP32S3")) {
-  if (!_availableDevices.any((d) => d.id == device.id)) {
-    _availableDevices.add(device);
-    notifyListeners();
-  }
-}
-
+        if (name.contains("ESP32S3")) {
+          if (!_availableDevices.any((d) => d.id == device.id)) {
+            _availableDevices.add(device);
+            notifyListeners();
+          }
+        }
       }
     });
 
@@ -109,12 +113,13 @@ if (name.contains("ESP32S3")) {
     notifyListeners();
 
     try {
-      await device.connect(autoConnect: false).timeout(Duration(seconds: 10));
+      await device.connect(autoConnect: false).timeout(const Duration(seconds: 10));
       connectedDevice = device;
       _isConnected = true;
       _isConnecting = false;
       notifyListeners();
 
+      // Escuchar desconexión
       device.state.listen((state) {
         if (state == BluetoothDeviceState.disconnected) {
           connectedDevice = null;
@@ -127,11 +132,11 @@ if (name.contains("ESP32S3")) {
 
       await _setupNotifications(device);
 
-      // 🕒 Enviar hora actual al conectar
+      // ⏰ Sincroniza hora inicial
       await _sendCurrentTime(device);
 
-      // ⏰ Actualizar hora cada minuto
-      _timeSyncTimer = Timer.periodic(Duration(minutes: 1), (_) async {
+      // Actualiza hora cada minuto
+      _timeSyncTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
         if (_isConnected && connectedDevice != null) {
           await _sendCurrentTime(connectedDevice!);
         }
@@ -155,11 +160,10 @@ if (name.contains("ESP32S3")) {
           for (var char in service.characteristics) {
             if (char.uuid == UART_RX_UUID && char.properties.write) {
               final now = DateTime.now();
-              final formattedTime =
-                  "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-              final message = "TIME:$formattedTime";
-              await char.write(message.codeUnits, withoutResponse: true);
-              debugPrint("🕒 Enviada hora al ESP32: $message");
+              final formatted = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+              final msg = "TIME:$formatted";
+              await char.write(msg.codeUnits, withoutResponse: true);
+              debugPrint("🕒 Enviada hora: $msg");
               return;
             }
           }
@@ -171,7 +175,7 @@ if (name.contains("ESP32S3")) {
   }
 
   // =====================
-  // Notificaciones desde ESP32
+  // Escuchar datos del ESP32
   // =====================
   Future<void> _setupNotifications(BluetoothDevice device) async {
     final services = await device.discoverServices();
@@ -181,9 +185,7 @@ if (name.contains("ESP32S3")) {
           if (char.uuid == UART_TX_UUID && char.properties.notify) {
             await char.setNotifyValue(true);
             _dataSubscription = char.value.listen((data) {
-              final text = String.fromCharCodes(
-                data,
-              ); // "STEPS:3500,BPM:85,DIST:2.4"
+              final text = String.fromCharCodes(data); // Ej: "STEPS:3500,BPM:85,DIST:2.4"
               final parts = text.split(',');
               for (var p in parts) {
                 final kv = p.split(':');
@@ -205,7 +207,7 @@ if (name.contains("ESP32S3")) {
   }
 
   // =====================
-  // Encender/apagar BLE
+  // Control del adaptador
   // =====================
   Future<void> enableBluetooth() async {
     if (Platform.isAndroid) await FlutterBluePlus.turnOn();

@@ -1,5 +1,3 @@
-// lib/screens/sleep_screen.dart
-
 import 'package:flutter/material.dart';
 import '../utils/app_theme.dart';
 import '../widgets/sleep_header_card.dart';
@@ -7,24 +5,113 @@ import '../widgets/goal_quality_card.dart';
 import '../widgets/week_days_graph.dart';
 import '../widgets/last_sleep_card.dart';
 
-class SleepScreen extends StatelessWidget {
+class SleepScreen extends StatefulWidget {
   const SleepScreen({super.key});
 
-  // Datos de ejemplo para la gráfica
-  static final List<Map<String, dynamic>> _mockSleepData = [
-    {'day': 'M', 'hours': '7h', 'factor': 0.8},
-    {'day': 'T', 'hours': '7h', 'factor': 0.8},
-    {'day': 'W', 'hours': '7h', 'factor': 0.8},
-    {'day': 'T', 'hours': '7h', 'factor': 0.8},
-    {'day': 'F', 'hours': '7h', 'factor': 0.8},
-    {'day': 'S', 'hours': '7h', 'factor': 0.8},
-    {'day': 'S', 'hours': '7h', 'factor': 0.9},
+  @override
+  State<SleepScreen> createState() => _SleepScreenState();
+}
+
+class _SleepScreenState extends State<SleepScreen> {
+  double goalHours = 8.0;
+
+  // Datos semanales simulados (ejemplo)
+  List<Map<String, dynamic>> sleepData = [
+    {'day': 'M', 'hours': 7.5},
+    {'day': 'T', 'hours': 8.0},
+    {'day': 'W', 'hours': 8.2},
+    {'day': 'T', 'hours': 7.8},
+    {'day': 'F', 'hours': 8.5},
+    {'day': 'S', 'hours': 6.9},
+    {'day': 'S', 'hours': 8.0},
   ];
+
+  int strikeCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _calculateStrike();
+  }
+
+  void _calculateStrike() {
+    int streak = 0;
+    for (var day in sleepData) {
+      if (day['hours'] >= goalHours) {
+        streak++;
+      } else {
+        streak = 0; // rompe la racha
+      }
+    }
+    setState(() => strikeCount = streak);
+  }
+
+  void _setGoalDialog() async {
+    double tempGoal = goalHours;
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: kDarkSecondaryBackground,
+          title: const Text('Set your sleep goal'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${tempGoal.toStringAsFixed(1)} hours',
+                style: const TextStyle(fontSize: 20, color: Colors.white),
+              ),
+              Slider(
+                value: tempGoal,
+                min: 4,
+                max: 10,
+                divisions: 12,
+                activeColor: kAccentColor,
+                onChanged: (value) {
+                  setState(() => tempGoal = value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kAccentColor,
+              ),
+              onPressed: () {
+                setState(() {
+                  goalHours = tempGoal;
+                  _calculateStrike();
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     const double screenPadding = 20.0;
     const double cardSpacing = 20.0;
+
+    // Convertir datos para la gráfica
+    final graphData = sleepData
+        .map((d) => {
+              'day': d['day'],
+              'hours': '${d['hours']}h',
+              'factor': (d['hours'] / goalHours).clamp(0.0, 1.2)
+            })
+        .toList();
+
+    final lastNight = sleepData.last;
 
     return Scaffold(
       backgroundColor: kDarkPrimaryBackground,
@@ -38,56 +125,59 @@ class SleepScreen extends StatelessWidget {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(screenPadding),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Tarjeta de Encabezado de Sueño (Circular Indicator)
-            const SleepHeaderCard(
-              currentHours: 8.0,
-              goalHours: 8.0,
+            // 1. Encabezado con Strike
+            SleepHeaderCard(
+              currentHours: lastNight['hours'],
+              goalHours: goalHours,
+              strikeCount: strikeCount,
             ),
-            
+
             const SizedBox(height: cardSpacing),
-            
-            // 2. Tarjetas de Meta y Calidad (Fila de 2)
+
+            // 2. Meta y Calidad
             Row(
               children: [
-                // Set Goal
-                GoalQualityCard(
-                  title: 'Set Goal',
-                  subtitle: 'Tap to edit',
-                  backgroundColor: kAccentColor,
-                  titleColor: kDarkPrimaryText,
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _setGoalDialog,
+                    child: GoalQualityCard(
+                      title: 'Set Goal',
+                      subtitle: '${goalHours.toStringAsFixed(1)}h',
+                      backgroundColor: kAccentColor,
+                      titleColor: kDarkPrimaryText,
+                    ),
+                  ),
                 ),
-                
                 const SizedBox(width: cardSpacing),
-                
-                // Quality
-                GoalQualityCard(
-                  title: 'Quality',
-                  subtitle: 'Last night',
-                  backgroundColor: kDarkSecondaryBackground,
-                  titleColor: kDarkPrimaryText,
+                const Expanded(
+                  child: GoalQualityCard(
+                    title: 'Quality',
+                    subtitle: 'Last night',
+                    backgroundColor: kDarkSecondaryBackground,
+                    titleColor: kDarkPrimaryText,
+                  ),
                 ),
               ],
             ),
-            
+
             const SizedBox(height: cardSpacing),
-            
-            // 3. Gráfica de Días de la Semana
-            WeekDaysGraph(sleepData: _mockSleepData),
-            
+
+            // 3. Gráfica semanal
+            WeekDaysGraph(sleepData: graphData),
+
             const SizedBox(height: cardSpacing),
-            
-            // 4. Último Sueño (Reutilizando la lógica de LastSleepCard)
-            const LastSleepCard(
-              duration: '7H 45M',
-              timeRange: '12:00 AM - 9:50 AM',
-              hintText: 'Try to sleep earlier tonight',
+
+            // 4. Última sesión de sueño
+            LastSleepCard(
+              duration: '${lastNight['hours']} H',
+              timeRange: '12:00 AM - 8:00 AM',
+              hintText: 'Try to sleep earlier tonight 😴',
             ),
           ],
         ),
       ),
-      // Mantenemos la barra de navegación para fines de demostración, aunque en la app real
-      // esto se manejaría en un widget padre (e.g., el Home/Main screen).
     );
   }
 }
