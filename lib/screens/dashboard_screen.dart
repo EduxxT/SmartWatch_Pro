@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../utils/app_theme.dart';
 import '../widgets/dashboard_card.dart';
 import '../widgets/circular_metric_card.dart';
+import '../widgets/banner_background.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -273,17 +274,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            Container(
-              height: 150,
-              decoration: BoxDecoration(
-                color: kDarkSecondaryBackground,
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            const SizedBox(height: cardSpacing),
+  padding: const EdgeInsets.all(20.0),
+  child: Column(
+    children: [
+      const BannerConFondoHora(),
+      const SizedBox(height: cardSpacing),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

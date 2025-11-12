@@ -7,6 +7,7 @@ class SleepHeaderCard extends StatelessWidget {
   final double goalHours;
   final String? metricLabel; // Si no es nulo, representa "Activity" (Steps)
   final int? strikeCount; // Nueva propiedad opcional para el modo Sleep
+  final double? goalSteps;
 
   const SleepHeaderCard({
     required this.currentHours,
@@ -14,6 +15,7 @@ class SleepHeaderCard extends StatelessWidget {
     this.metricLabel,
     this.strikeCount,
     super.key,
+    this.goalSteps, required bool isActivityView,
   });
 
   @override
@@ -110,14 +112,17 @@ class SleepHeaderCard extends StatelessWidget {
       ],
     ),
     Column(
-      children: [
-        Text('Goal', style: textStyle.copyWith(color: kDarkSecondaryText)),
-        Text(
-          isActivityView ? '10,000' : '${goalHours.toStringAsFixed(1)}H',
-          style: titleStyle.copyWith(color: kDarkPrimaryText),
-        ),
-      ],
+  children: [
+    Text('Goal', style: textStyle.copyWith(color: kDarkSecondaryText)),
+    Text(
+      isActivityView
+          ? (goalSteps ?? 0).toString() // ✅ usa la meta pasada
+          : '${goalHours.toStringAsFixed(1)}H',
+      style: titleStyle.copyWith(color: kDarkPrimaryText),
     ),
+  ],
+),
+
   ],
 ),
 

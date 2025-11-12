@@ -46,56 +46,90 @@ class _SleepScreenState extends State<SleepScreen> {
     setState(() => strikeCount = streak);
   }
 
-  void _setGoalDialog() async {
-    double tempGoal = goalHours;
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: kDarkSecondaryBackground,
-          title: const Text('Set your sleep goal'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${tempGoal.toStringAsFixed(1)} hours',
-                style: const TextStyle(fontSize: 20, color: Colors.white),
-              ),
-              Slider(
-                value: tempGoal,
-                min: 4,
-                max: 10,
-                divisions: 12,
-                activeColor: kAccentColor,
-                onChanged: (value) {
-                  setState(() => tempGoal = value);
-                },
-              ),
-            ],
+ void _setGoalDialog() async {
+  double tempGoal = goalHours;
+
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        backgroundColor: kDarkSecondaryBackground,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Set your sleep goal',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+        ),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${tempGoal.toStringAsFixed(1)} hours',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Slider(
+                  value: tempGoal,
+                  min: 4,
+                  max: 10,
+                  divisions: 12,
+                  activeColor: kAccentColor,
+                  inactiveColor: Colors.white24,
+                  label: '${tempGoal.toStringAsFixed(1)}h',
+                  onChanged: (value) {
+                    setDialogState(() => tempGoal = value);
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kAccentColor,
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kAccentColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
-              onPressed: () {
-                setState(() {
-                  goalHours = tempGoal;
-                  _calculateStrike();
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Save'),
             ),
-          ],
-        );
-      },
-    );
-  }
+            onPressed: () {
+              setState(() {
+                goalHours = tempGoal;
+                _calculateStrike();
+              });
+              Navigator.pop(context);
+            },
+            child: const Text(
+              'Save',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -132,6 +166,7 @@ class _SleepScreenState extends State<SleepScreen> {
               currentHours: lastNight['hours'],
               goalHours: goalHours,
               strikeCount: strikeCount,
+              isActivityView: false,
             ),
 
             const SizedBox(height: cardSpacing),
