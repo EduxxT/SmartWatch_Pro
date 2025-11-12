@@ -16,3 +16,6 @@ Falta arreglar las rachas de sueno y agregar la racha de pasos
 Falta meter todo a sqlite para poder almacenar la info en caso de que se desconecte
 
 Arreglar efectos visuales como las cajas o las transiciones
+
+
+12/11/2025 -- Se agrego el guardado de datos  usando SQLITE (RACHAS DE SUENO Y RACHAS DE PASOS)
