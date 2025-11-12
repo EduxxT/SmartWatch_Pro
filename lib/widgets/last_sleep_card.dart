@@ -12,8 +12,8 @@ class LastSleepCard extends StatelessWidget {
     required this.duration,
     required this.timeRange,
     this.hintText, // <--- No requerido: Correcto
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {

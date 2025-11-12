@@ -8,8 +8,8 @@ class CustomBottomNavBar extends StatelessWidget {
   const CustomBottomNavBar({
     required this.selectedIndex,
     required this.onItemTapped,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {

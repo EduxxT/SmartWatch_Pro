@@ -14,8 +14,8 @@ class GoalQualityCard extends StatelessWidget {
     required this.subtitle,
     required this.backgroundColor,
     required this.titleColor,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {

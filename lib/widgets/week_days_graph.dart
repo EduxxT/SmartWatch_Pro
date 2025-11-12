@@ -6,8 +6,8 @@ class WeekDaysGraph extends StatelessWidget {
 
   const WeekDaysGraph({
     required this.sleepData,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   // Helper widget para construir una barra individual
   Widget _buildBar(String day, String hours, double heightFactor) {
@@ -100,8 +100,8 @@ class YourWidget extends StatelessWidget {
 
   const YourWidget({
     required this.yourSleepData,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {

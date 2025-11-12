@@ -16,8 +16,8 @@ class CircularMetricCard extends StatelessWidget {
     required this.metricText,
     required this.unitText,
     required this.percent,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {

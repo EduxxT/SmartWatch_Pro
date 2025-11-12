@@ -11,8 +11,8 @@ class SleepCard extends StatelessWidget {
   const SleepCard({
     required this.duration,
     required this.timeRange,
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
